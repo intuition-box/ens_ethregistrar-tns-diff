@@ -1,72 +1,87 @@
-pragma solidity ^0.5.0;
+//SPDX-License-Identifier: MIT
+pragma solidity ~0.8.17;
 
-import "./PriceOracle.sol";
-import "./SafeMath.sol";
+import "./IPriceOracle.sol";
 import "./StringUtils.sol";
-import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-interface DSValue {
-    function read() external view returns (bytes32);
-}
-
-// StablePriceOracle sets a price in USD, based on an oracle.
-contract StablePriceOracle is Ownable, PriceOracle {
-    using SafeMath for *;
+/**
+ * @dev StablePriceOracle for TNS.
+ * Adapted from ENS StablePriceOracle for TRUST token pricing.
+ * Prices are in TRUST (native token) instead of USD.
+ */
+contract StablePriceOracle is IPriceOracle, Ownable {
     using StringUtils for *;
 
-    // Oracle address
-    DSValue usdOracle;
+    // Rent prices in TRUST per year (in wei)
+    uint256 public price1Letter;
+    uint256 public price2Letter;
+    uint256 public price3Letter;
+    uint256 public price4Letter;
+    uint256 public price5Letter;
 
-    // Rent in attodollars (1e-18) per second
-    uint[] public rentPrices;
+    event RentPriceChanged(uint256[] prices);
 
-    event OracleChanged(address oracle);
-    event RentPriceChanged(uint[] prices);
+    constructor(uint256[] memory _rentPrices) {
+        price1Letter = _rentPrices[0];
+        price2Letter = _rentPrices[1];
+        price3Letter = _rentPrices[2];
+        price4Letter = _rentPrices[3];
+        price5Letter = _rentPrices[4];
+    }
 
-    constructor(DSValue _usdOracle, uint[] memory _rentPrices) public {
-        setOracle(_usdOracle);
-        setPrices(_rentPrices);
+    function price(
+        string calldata name,
+        uint256 expires,
+        uint256 duration
+    ) external view override returns (Price memory) {
+        uint256 len = name.strlen();
+        uint256 basePrice;
+
+        if (len >= 5) {
+            basePrice = price5Letter;
+        } else if (len == 4) {
+            basePrice = price4Letter;
+        } else if (len == 3) {
+            basePrice = price3Letter;
+        } else if (len == 2) {
+            basePrice = price2Letter;
+        } else {
+            basePrice = price1Letter;
+        }
+
+        return
+            Price({
+                base: (basePrice * duration) / 365 days,
+                premium: _premium(name, expires, duration)
+            });
     }
 
     /**
-     * @dev Sets the price oracle address
-     * @param _usdOracle The address of the price oracle to use.
+     * @dev Returns the premium price for a name.
+     * Can be overridden to add premium decay for recently expired names.
      */
-    function setOracle(DSValue _usdOracle) public onlyOwner {
-        usdOracle = _usdOracle;
-        emit OracleChanged(address(_usdOracle));
+    function _premium(
+        string memory name,
+        uint256 expires,
+        uint256 duration
+    ) internal view virtual returns (uint256) {
+        return 0;
     }
 
-    /**
-     * @dev Sets rent prices.
-     * @param _rentPrices The price array. Each element corresponds to a specific
-     *                    name length; names longer than the length of the array
-     *                    default to the price of the last element.
-     */
-    function setPrices(uint[] memory _rentPrices) public onlyOwner {
-        rentPrices = _rentPrices;
+    function setPrices(uint256[] memory _rentPrices) external onlyOwner {
+        require(_rentPrices.length == 5, "Must provide 5 prices");
+        price1Letter = _rentPrices[0];
+        price2Letter = _rentPrices[1];
+        price3Letter = _rentPrices[2];
+        price4Letter = _rentPrices[3];
+        price5Letter = _rentPrices[4];
         emit RentPriceChanged(_rentPrices);
     }
 
-    /**
-     * @dev Returns the price to register or renew a name.
-     * @param name The name being registered or renewed.
-     * @param duration How long the name is being registered or extended for, in seconds.
-     * @return The price of this renewal or registration, in wei.
-     */
-    function price(string calldata name, uint /*expires*/, uint duration) view external returns(uint) {
-        uint len = name.strlen();
-        require(len > 0);
-        if(len > rentPrices.length) {
-            len = rentPrices.length;
-        }
-        uint priceUSD = rentPrices[len - 1].mul(duration);
-
-        // Price of one ether in attodollars
-        uint ethPrice = uint(usdOracle.read());
-
-        // priceUSD and ethPrice are both fixed-point values with 18dp, so we
-        // multiply the numerator by 1e18 before dividing.
-        return priceUSD.mul(1e18).div(ethPrice);
+    function supportsInterface(
+        bytes4 interfaceID
+    ) public view virtual returns (bool) {
+        return interfaceID == type(IPriceOracle).interfaceId;
     }
 }
