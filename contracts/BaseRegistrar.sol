@@ -17,10 +17,10 @@ contract BaseRegistrar is ERC721, Ownable {
     // Expiration timestamp for migrated domains.
     uint public transferPeriodEnds;
 
-    // The ENS registry
-    ENS public ens;
+    // The TNS registry
+    ENS public tns;
 
-    // The namehash of the TLD this registrar owns (eg, .eth)
+    // The namehash of the TLD this registrar owns (eg, .trust)
     bytes32 public baseNode;
 
     // The interim registrar
@@ -49,7 +49,7 @@ contract BaseRegistrar is ERC721, Ownable {
     function renew(uint256 id, uint duration) external returns(uint);
 
     /**
-     * @dev Reclaim ownership of a name in ENS, if you own it in the registrar.
+     * @dev Reclaim ownership of a name in TNS, if you own it in the registrar.
      */
     function reclaim(uint256 id) external;
 

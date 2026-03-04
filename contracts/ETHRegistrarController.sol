@@ -8,25 +8,28 @@ import "openzeppelin-solidity/contracts/ownership/Ownable.sol";
 /**
  * @dev A registrar controller for registering and renewing names at fixed cost.
  */
-contract ETHRegistrarController is Ownable {
+contract TNSRegistrarController is Ownable {
     using StringUtils for *;
 
-    uint constant public MIN_COMMITMENT_AGE = 1 hours;
+    uint constant public MIN_COMMITMENT_AGE = 60;
     uint constant public MAX_COMMITMENT_AGE = 48 hours;
     uint constant public MIN_REGISTRATION_DURATION = 28 days;
 
     BaseRegistrar base;
     PriceOracle prices;
+    address payable public treasury;
 
     mapping(bytes32=>uint) public commitments;
 
     event NameRegistered(string name, address indexed owner, uint cost, uint expires);
     event NameRenewed(string name, uint cost, uint expires);
     event NewPriceOracle(address indexed oracle);
+    event NewTreasury(address indexed treasury);
 
-    constructor(BaseRegistrar _base, PriceOracle _prices) public {
+    constructor(BaseRegistrar _base, PriceOracle _prices, address payable _treasury) public {
         base = _base;
         prices = _prices;
+        treasury = _treasury;
     }
 
     function rentPrice(string memory name, uint duration) view public returns(uint) {
@@ -35,7 +38,7 @@ contract ETHRegistrarController is Ownable {
     }
 
     function valid(string memory name) public view returns(bool) {
-        return name.strlen() > 6;
+        return name.strlen() >= 3;
     }
 
     function available(string memory name) public view returns(bool) {
@@ -60,7 +63,8 @@ contract ETHRegistrarController is Ownable {
 
         // If the commitment is too old, or the name is registered, stop
         if(commitments[commitment] + MAX_COMMITMENT_AGE < now || !available(name))  {
-            msg.sender.transfer(msg.value);
+            (bool refundSuccess,) = msg.sender.call.value(msg.value)("");
+            require(refundSuccess);
             return;
         }
         delete(commitments[commitment]);
@@ -73,8 +77,11 @@ contract ETHRegistrarController is Ownable {
         uint expires = base.register(uint256(label), owner, duration);
         emit NameRegistered(name, owner, cost, expires);
 
+        (bool treasurySuccess,) = treasury.call.value(cost)("");
+        require(treasurySuccess);
         if(msg.value > cost) {
-            msg.sender.transfer(msg.value - cost);
+            (bool senderSuccess,) = msg.sender.call.value(msg.value - cost)("");
+            require(senderSuccess);
         }
     }
 
@@ -85,8 +92,11 @@ contract ETHRegistrarController is Ownable {
         bytes32 label = keccak256(bytes(name));
         uint expires = base.renew(uint256(label), duration);
 
+        (bool treasurySuccess,) = treasury.call.value(cost)("");
+        require(treasurySuccess);
         if(msg.value > cost) {
-            msg.sender.transfer(msg.value - cost);
+            (bool senderSuccess,) = msg.sender.call.value(msg.value - cost)("");
+            require(senderSuccess);
         }
 
         emit NameRenewed(name, cost, expires);
@@ -97,7 +107,13 @@ contract ETHRegistrarController is Ownable {
         emit NewPriceOracle(address(prices));
     }
 
+    function setTreasury(address payable _treasury) public onlyOwner {
+        treasury = _treasury;
+        emit NewTreasury(_treasury);
+    }
+
     function withdraw() public onlyOwner {
-        msg.sender.transfer(address(this).balance);
+        (bool success,) = treasury.call.value(address(this).balance)("");
+        require(success);
     }
 }

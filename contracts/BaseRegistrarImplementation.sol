@@ -9,15 +9,15 @@ contract BaseRegistrarImplementation is BaseRegistrar {
     // A map of expiry times
     mapping(uint256=>uint) expiries;
 
-    constructor(ENS _ens, bytes32 _baseNode, uint _transferPeriodEnds) public {
-        ens = _ens;
+    constructor(ENS _tns, bytes32 _baseNode, uint _transferPeriodEnds) public {
+        tns = _tns;
         baseNode = _baseNode;
-        previousRegistrar = HashRegistrar(ens.owner(baseNode));
+        previousRegistrar = HashRegistrar(tns.owner(baseNode));
         transferPeriodEnds = _transferPeriodEnds;
     }
 
     modifier live {
-        require(ens.owner(baseNode) == address(this));
+        require(tns.owner(baseNode) == address(this));
         _;
     }
 
@@ -78,7 +78,7 @@ contract BaseRegistrarImplementation is BaseRegistrar {
             _burn(id);
         }
         _mint(owner, id);
-        ens.setSubnodeOwner(baseNode, bytes32(id), owner);
+        tns.setSubnodeOwner(baseNode, bytes32(id), owner);
 
         emit NameRegistered(id, owner, now + duration);
 
@@ -95,11 +95,11 @@ contract BaseRegistrarImplementation is BaseRegistrar {
     }
 
     /**
-     * @dev Reclaim ownership of a name in ENS, if you own it in the registrar.
+     * @dev Reclaim ownership of a name in TNS, if you own it in the registrar.
      */
     function reclaim(uint256 id) external live {
         require(_isApprovedOrOwner(msg.sender, id));
-        ens.setSubnodeOwner(baseNode, bytes32(id), ownerOf(id));
+        tns.setSubnodeOwner(baseNode, bytes32(id), ownerOf(id));
     }
 
     /**
@@ -126,7 +126,7 @@ contract BaseRegistrarImplementation is BaseRegistrar {
         expiries[id] = transferPeriodEnds;
         _mint(owner, id);
 
-        ens.setSubnodeOwner(baseNode, label, owner);
+        tns.setSubnodeOwner(baseNode, label, owner);
 
         emit NameMigrated(id, owner, transferPeriodEnds);
         emit NameRegistered(id, owner, transferPeriodEnds);
