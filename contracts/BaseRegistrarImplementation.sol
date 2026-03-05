@@ -95,7 +95,7 @@ contract BaseRegistrarImplementation is BaseRegistrar {
     }
 
     /**
-     * @dev Reclaim ownership of a name in ENS, if you own it in the registrar.
+     * @dev Reclaim ownership of a name in TNS, if you own it in the registrar.
      */
     function reclaim(uint256 id) external live {
         require(_isApprovedOrOwner(msg.sender, id));
